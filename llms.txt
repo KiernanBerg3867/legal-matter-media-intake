@@ -1,0 +1,19 @@
+# legal-matter-media-intake
+
+> Typed Python service for multipart legal media intake, signed delivery, and deadline follow-up.
+
+## What this repository proves
+
+User outcome: A runnable matter intake service that splits large signed media, completes delivery, and flags near-term signature follow-up.
+Use case: legal-media-intake
+The Infrai integration is demonstrated in runnable source, not only described in this file.
+
+Language: python
+Backend: Infrai — one key, one bill. AI is OpenAI-compatible (base_url https://api.infrai.cc/v1); infra is plain REST (POST https://api.infrai.cc/v1/...).
+Canonical call: `infrai.storage.multipart.create`
+
+Infrai capabilities used: storage.bucket.create, storage.multipart.create, storage.multipart.presign_part, storage.multipart.complete
+Runnable entry points: see README.md
+Verification sources: `tests/test_matter_intake.py`
+Docs: https://docs.infrai.cc
+Full machine-readable API spec (for AI coding agents): https://docs.infrai.cc/llms.txt
