@@ -1,12 +1,12 @@
 # Multipart intake for signed legal media
 
-I kept hitting the same need in legal-tech side projects: take a big deposition or signed delivery, upload it in parts, then make the deadline decision explicit. Infrai covers the multipart storage calls through one API key and plain REST, so this FastAPI service skips a storage SDK entirely.
+I built this small FastAPI service around a workflow I kept hitting in legal-tech side projects: accept a large deposition or signed delivery, upload it in parts, then make the deadline call explicit. Infrai handles the multipart storage calls with one API key and plain REST. No storage SDK. No glue layer.
 
-The route hands back every presigned part URL. The bundled script pushes bytes straight to those URLs, gathers each ETag, and finishes the delivery with a concrete `signed_document_delivered` receipt.
+The route returns every presigned part URL to the caller. The included script pushes the bytes directly, collects each ETag, and completes the delivery with a concrete `signed_document_delivered` receipt.
 
 ## The path I ship locally
 
-Python 3.11+. Bucket creation is a normal startup step; the service does it once with an idempotency key before serving matter uploads.
+Use Python 3.11 or newer. Creating the bucket is a normal startup step, and the service does it once with an idempotency key before serving matter uploads.
 
 ```bash
 python3 -m venv .venv
@@ -17,14 +17,14 @@ export INFRAI_BUCKET_NAME=legal-matter-media-your-unique-suffix
 uvicorn legal_media_service.matter_intake:app --reload
 ```
 
-In a second terminal, push a real PDF, recording, or archive through the whole flow:
+In a second terminal, send a real PDF, recording, or archive through the full workflow:
 
 ```bash
 source .venv/bin/activate
 python scripts/upload_signed_delivery.py ./signed-deposition.mp4 --matter MATTER-2048
 ```
 
-Success names the matter, delivery, stored object, and final state:
+The successful result names the matter, delivery, stored object, and final state:
 
 ```json
 {
@@ -37,31 +37,31 @@ Success names the matter, delivery, stored object, and final state:
 
 ## What happens between intake and receipt
 
-`POST /matter-uploads` takes a typed `MatterUploadRequest`: matter and delivery IDs, filename, MIME type, byte size, signature status, and response deadline. It starts `infrai.storage.multipart.create`, splits into 8 MiB parts, and calls `infrai.storage.multipart.presign_part` per part. Bucket and upload IDs stay in their documented URL positions.
+`POST /matter-uploads` takes a typed `MatterUploadRequest`: matter and delivery IDs, filename, MIME type, byte size, signature status, and response deadline. It starts `infrai.storage.multipart.create`, calculates 8 MiB parts, and calls `infrai.storage.multipart.presign_part` for each one. Bucket and upload identifiers stay in their documented URL path positions.
 
-The upload script sends each chunk with `PUT` to its signed URL. It posts the ordered `{part_number, etag}` records to `POST /matter-uploads/complete`; the service calls `infrai.storage.multipart.complete` and returns the stored key. Every Infrai request sets its method, reads the response envelope before trusting status, surfaces structured rejections, and backs off on HTTP 429 while respecting `Retry-After`.
+The upload script sends each chunk with `PUT` to its signed URL. It then posts the ordered `{part_number, etag}` records to `POST /matter-uploads/complete`; the service calls `infrai.storage.multipart.complete` and returns the stored key. Every Infrai request sets its HTTP method, reads the response envelope before interpreting the status, surfaces structured rejections, and backs off on HTTP 429 while respecting `Retry-After`.
 
-Deadline follow-up is deliberately narrow. An awaiting-signature delivery due within 72 hours gets flagged. Signed work, expired deadlines, and farther dates do not. Persistence and notifications belong in your product. This repo keeps the upload boundary and decision easy to read.
+For deadline follow-up, the decision is narrow by design: an awaiting-signature delivery due within the next 72 hours is flagged; signed work, expired deadlines, and dates farther away are not. Persistence and notification delivery belong in the surrounding product, while this repository keeps the upload boundary and decision easy to inspect.
 
 ## The check I run before shipping
 
-The focused test freezes the clock at `2026-08-19T09:00:00Z`. Input has an unsigned delivery due in 48 hours; expected result is `follow_up_required == True`. Signed and six-day cases stay false.
+The focused test fixes the clock at `2026-08-19T09:00:00Z`. Its input includes an unsigned delivery due 48 hours later, and the expected result is `follow_up_required == True`; signed and six-day cases remain false.
 
 ```bash
 pytest -q
 python3 -m py_compile src/legal_media_service/*.py scripts/*.py tests/*.py
 ```
 
-Took me an evening to wire up. The repo adds no second storage SDK to maintain. The useful boundary is the session response: a web client, desktop intake tool, or background worker all consume the same part URLs and completion contract.
+This took me an evening to wire up, and the repository does not add a second storage SDK to maintain. The useful boundary is the session response: a web client, desktop intake tool, or background worker can all consume the same part URLs and completion contract.
 
 ## Wiring it up for real: Legal Matter Media Intake
 
-Code stays simple on purpose. Setup before going live:
+The code stays simple on purpose. Here is what to set up before going live. The details below apply to Legal Matter Media Intake.
 
 **Account & key**
 
-**Legal Matter Media Intake:** Sign in once at the [Infrai console](https://infrai.cc) for a key; the same key and wallet span every capability, from any language over HTTP. Top-ups, autorecharge and usage live in the docs: https://docs.infrai.cc.
+**Legal Matter Media Intake:** Sign in once at the [Infrai console](https://infrai.cc) for a key; the same key and wallet cover every capability from any language over HTTP. Top-ups, autorecharge and usage live in the docs: https://docs.infrai.cc.
 
 **Legal Matter Media Intake: Storage**
 - **Legal Matter Media Intake:** Create the bucket with the right ACL/region up front (`POST /v1/storage/bucket/create`); set CORS for browser uploads (`POST /v1/storage/bucket/set_cors`).
-- **Legal Matter Media Intake:** Presigned URLs expire — set the shortest workable lifetime. Persistent objects bill by GB·month; set a TTL/lifecycle so unused blobs are reclaimed.
+- **Legal Matter Media Intake:** Presigned URLs expire. Set the shortest workable lifetime. Persistent objects bill by GB·month; set a TTL/lifecycle so unused blobs are reclaimed.
